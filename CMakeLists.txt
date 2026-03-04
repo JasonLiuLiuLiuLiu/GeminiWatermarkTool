@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(GeminiWatermarkTool VERSION 0.2.4 LANGUAGES CXX)
+project(GeminiWatermarkTool VERSION 0.2.5 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(BUILD_GUI "Build with ImGui GUI support" OFF)
 option(ENABLE_D3D11 "Enable Direct3D 11 backend (Windows only, requires BUILD_GUI)" OFF)
 option(ENABLE_VULKAN "Enable Vulkan backend (requires BUILD_GUI)" OFF)
+option(ENABLE_AI_DENOISE "Enable AI denoising for residual cleanup (NCNN + Vulkan GPU)" OFF)
 
 # Validate options
 if(ENABLE_D3D11 AND NOT BUILD_GUI)
@@ -177,6 +178,112 @@ if(BUILD_GUI)
 
     # D3D11 uses Windows SDK, no additional find_package needed
 endif()
+
+# =============================================================================
+# NCNN (AI Denoise - build from source, static library)
+#
+# Architecture:
+#   - NCNN static lib with Vulkan GPU acceleration
+#   - volk provides dynamic Vulkan loading (no hard link to vulkan-1.lib)
+#   - glslang from vcpkg for runtime SPIR-V shader compilation
+#   - simplevk.h hack: #define NCNN_SIMPLEVK_H to skip NCNN's built-in
+#     Vulkan loader in our headers, volk takes over instead
+#   - Model weights embedded via .mem.h (compiled into exe, ~1.3 MB)
+# =============================================================================
+if(ENABLE_AI_DENOISE)
+
+    # OpenMP (NCNN CPU backend uses OpenMP for parallel inference)
+    find_package(OpenMP)
+
+    if(OPENMP_FOUND)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+    endif()
+
+    set(NCNN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/ncnn/ncnn-20260113-src")
+
+    if(NOT EXISTS "${NCNN_ROOT}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "NCNN source not found at: ${NCNN_ROOT}\n"
+            "Please extract NCNN 20260113 source to external/ncnn/ncnn-20260113-src/")
+    endif()
+
+    message(STATUS "Building NCNN from source: ${NCNN_ROOT}")
+
+    # -------------------------------------------------------------------------
+    # NCNN build configuration
+    # -------------------------------------------------------------------------
+
+    # Static library (embedded into exe, no ncnn.dll needed)
+    set(NCNN_SHARED_LIB OFF CACHE BOOL "" FORCE)
+
+    # MSVC compatibility (NCNN defaults to disabling RTTI/exceptions)
+    if(MSVC)
+        set(NCNN_DISABLE_RTTI OFF CACHE BOOL "" FORCE)
+        set(NCNN_DISABLE_EXCEPTION OFF CACHE BOOL "" FORCE)
+    endif()
+
+    # find_package(glslang CONFIG REQUIRED)
+    # set(NCNN_SYSTEM_GLSLANG ON CACHE BOOL "" FORCE)
+
+    # Vulkan GPU acceleration (dynamic loading via NCNN's internal simplevk)
+    set(NCNN_VULKAN ON CACHE BOOL "" FORCE)
+    set(NCNN_VULKAN_ONLINE_SPIRV OFF CACHE BOOL "" FORCE)
+
+    # Don't build NCNN tools/tests/examples (we only need the library)
+    set(NCNN_INSTALL_SDK OFF CACHE BOOL "" FORCE)
+    set(NCNN_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(NCNN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    set(NCNN_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(NCNN_BENCHMARK OFF CACHE BOOL "" FORCE)
+    set(NCNN_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
+
+    # Performance options
+    set(NCNN_ENABLE_LTO ON CACHE BOOL "" FORCE)
+    set(NCNN_OPENMP ON CACHE BOOL "" FORCE)
+
+    # -------------------------------------------------------------------------
+    # Minimal layer set for FDnCNN
+    #
+    # FDnCNN architecture: 20x Conv2d with ReLU activation (no BN)
+    # Only needs: Convolution, ReLU, and NCNN infrastructure layers
+    # -------------------------------------------------------------------------
+    set(WITH_LAYER_convolution ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_relu ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_input ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_concat ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_split ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_packing ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_cast ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_flatten ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_padding ON CACHE BOOL "" FORCE)
+    set(WITH_LAYER_binaryop ON CACHE BOOL "" FORCE)
+
+    # Future: enable for FFDNet / larger models
+    # set(WITH_LAYER_pixelshuffle ON CACHE BOOL "" FORCE)
+    # set(WITH_LAYER_batchnorm ON CACHE BOOL "" FORCE)
+    # set(WITH_LAYER_deconvolution ON CACHE BOOL "" FORCE)
+
+    # -------------------------------------------------------------------------
+    # Build NCNN
+    # -------------------------------------------------------------------------
+    add_subdirectory(${NCNN_ROOT} ncnn)
+
+    # Keep NCNN build outputs alongside main binary
+    set_target_properties(ncnn PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+
+    # Volk: meta-loader for Vulkan (provides function declarations
+    # without hard-linking vulkan-1.lib; pairs with simplevk.h hack)
+    find_package(volk CONFIG REQUIRED)
+
+    message(STATUS "NCNN: Static library, Vulkan GPU, FDnCNN layers")
+endif()
+
 # =============================================================================
 # Source Files
 # =============================================================================
@@ -194,6 +301,18 @@ set(CORE_HEADERS
     src/core/watermark_detector.hpp
     src/core/types.hpp
 )
+
+# AI Denoise sources (conditional on ENABLE_AI_DENOISE)
+if(ENABLE_AI_DENOISE)
+    list(APPEND CORE_SOURCES
+        src/core/ai_denoise.cpp
+        src/core/ai_denoise_model.cpp   # Isolated TU for .mem.h (heavy header)
+    )
+    list(APPEND CORE_HEADERS
+        src/core/ai_denoise.hpp
+        src/core/ncnn_shim.hpp
+    )
+endif()
 
 # CLI sources (always built)
 set(CLI_SOURCES
@@ -286,6 +405,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/assets
 )
 
+if(ENABLE_AI_DENOISE)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        # NCNN model output headers (.id.h, .mem.h)
+        ${CMAKE_CURRENT_SOURCE_DIR}/external/ncnn/model-convert/output
+    )
+endif()
+
 # =============================================================================
 # Link Libraries
 # =============================================================================
@@ -322,6 +448,14 @@ if(BUILD_GUI)
     endif()
 endif()
 
+# AI Denoise: NCNN static lib + volk dynamic Vulkan loader
+if(ENABLE_AI_DENOISE)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        ncnn
+        volk::volk
+    )
+endif()
+
 # macOS framework linking
 if(APPLE AND COREFOUNDATION_LIBRARY)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${COREFOUNDATION_LIBRARY})
@@ -336,6 +470,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     $<$<BOOL:${BUILD_GUI}>:GWT_HAS_GUI=1>
     $<$<BOOL:${ENABLE_D3D11}>:GWT_HAS_D3D11=1>
     $<$<BOOL:${ENABLE_VULKAN}>:GWT_HAS_VULKAN=1>
+    $<$<BOOL:${ENABLE_AI_DENOISE}>:GWT_HAS_AI_DENOISE=1>
 )
 
 # =============================================================================
@@ -371,6 +506,12 @@ message(STATUS "  OPENGL_opengl_LIBRARY: ${OPENGL_opengl_LIBRARY}")
 message(STATUS "  OPENGL_glx_LIBRARY: ${OPENGL_glx_LIBRARY}")
 message(STATUS "  ENABLE_D3D11: ${ENABLE_D3D11}")
 message(STATUS "  ENABLE_VULKAN: ${ENABLE_VULKAN}")
+message(STATUS "  ENABLE_AI_DENOISE: ${ENABLE_AI_DENOISE}")
+if(ENABLE_AI_DENOISE)
+    message(STATUS "    NCNN: Static lib, Vulkan GPU + CPU fallback")
+    message(STATUS "    Model: FDnCNN Color (embedded FP16, ~1.3 MB)")
+    message(STATUS "    OpenMP: ${OPENMP_FOUND}")
+endif()
 if(APPLE)
     message(STATUS "")
     message(STATUS "macOS:")

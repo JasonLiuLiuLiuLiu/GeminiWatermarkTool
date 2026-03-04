@@ -1,6 +1,6 @@
 {
   "name": "gemini-watermark-tool",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "A tool to add/remove Gemini-style visible watermarks using reverse alpha blending",
   "homepage": "https://github.com/allenk/GeminiWatermarkTool",
   "license": "MIT",
@@ -53,6 +53,12 @@
         },
         "vulkan",
         "vulkan-memory-allocator"
+      ]
+    },
+    "ai-denoise": {
+      "description": "AI denoising for watermark residual cleanup (NCNN + Vulkan GPU)",
+      "dependencies": [
+        "volk"
       ]
     }
   },
