@@ -24,6 +24,7 @@ Gemini Watermark Tool removes Gemini visible watermarks from images using **math
 - **Smart detection**: three-stage NCC algorithm with confidence scoring — skip non-watermarked images automatically
 - **Batch processing**: process entire directories with thumbnail preview and progress tracking
 - **Cross-platform**: Windows / Linux / macOS / Android (CLI)
+- **AI Agent ready**: [Claude Code Skill + MCP Server](https://github.com/allenk/gwt-integrations) for automated workflows
 
 ## 🖥️ GUI Application — Major Update
 
@@ -704,11 +705,42 @@ MIT License
 
 **Allen Kuo** ([@allenk](https://github.com/allenk))
 
+## Integrations — AI Agent & MCP Support
+
+> **[gwt-integrations](https://github.com/allenk/gwt-integrations)** — Claude Code Skill + MCP Server for GeminiWatermarkTool
+
+Enable AI coding agents (Claude Code, Cursor, Windsurf, etc.) to use GeminiWatermarkTool directly:
+
+| Component | Description |
+|-----------|-------------|
+| **Claude Code Skill** | Teaches AI agents GWT's full CLI syntax, region/snap/denoise options, and best practices — agents can remove watermarks from images without manual guidance |
+| **MCP Server** | Exposes GWT as 4 tools via [Model Context Protocol](https://modelcontextprotocol.io/) — `remove_watermark`, `detect_watermark`, `batch_process`, `get_tool_info` — any MCP-compatible client can call them |
+| **install.py** | Cross-platform installer (stdlib only) — auto-detects GWT binary, configures Claude Code skill and MCP server in one command |
+
+**Quick start:**
+
+```bash
+# Install the integration (after GeminiWatermarkTool is on PATH)
+git clone https://github.com/allenk/gwt-integrations.git
+cd gwt-integrations
+python install.py
+```
+
+After installation, AI agents can process watermarks conversationally:
+
+```
+"Remove the Gemini watermark from screenshot.png using AI denoise"
+"Batch process all images in ./photos/ with fallback snap detection"
+```
+
+See [gwt-integrations README](https://github.com/allenk/gwt-integrations) for full setup instructions and MCP configuration.
+
 ## Related
 
 - [Removing Gemini AI Watermarks: A Deep Dive into Reverse Alpha Blending](https://allenkuo.medium.com/removing-gemini-ai-watermarks-a-deep-dive-into-reverse-alpha-blending-bbbd83af2a3f)
 - [SynthID Image Watermark Research Report](https://allenkuo.medium.com/synthid-image-watermark-research-report-9b864b19f9cf)
 - [SynthID Research Report](report/synthid_research.md) — Why invisible watermarks cannot be removed
+- [gwt-integrations](https://github.com/allenk/gwt-integrations) — Claude Code Skill + MCP Server for AI agent automation
 
 ## Third-Party Licenses
 

@@ -72,6 +72,9 @@ int run(int argc, char** argv) {
         return 1;
     }
 
+    // Enable screen saver (allows it to activate when idle)
+    SDL_EnableScreenSaver();
+
     // Parse backend type
     BackendType backend_type = parse_backend_arg(argc, argv);
     spdlog::info("Requested backend: {}", to_string(backend_type));
