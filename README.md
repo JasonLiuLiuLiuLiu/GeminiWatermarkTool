@@ -43,6 +43,23 @@ Key capabilities include:
 - **Cross-platform**: Windows / Linux / macOS / Android (CLI)
 - **AI Agent ready**: [Claude Code Skill + MCP Server](https://github.com/allenk/gwt-integrations) for automation and agent workflows
 
+## 🎬 Veo Video Watermark Removal — Demo Available
+
+> **NEW:** GeminiWatermarkTool now supports removing **Google Veo** video watermarks.
+> The same reverse alpha blending engine, now for video — direct mp4-to-mp4, with audio preserved.
+
+A standalone demo build (Windows x64) is available for testing:
+
+**[VeoWatermarkRemover — Download Demo](https://github.com/allenk/VeoWatermarkRemover)**
+
+- Drag & drop your Veo `.mp4` file onto the exe — done
+- 36 MB standalone, zero dependencies
+- 720p ~50 fps, 1080p ~18 fps
+- AI denoise + audio passthrough included
+
+> Cross-platform support and GUI integration are coming soon.
+> This Veo feature will be merged into GeminiWatermarkTool when stable.
+
 ## 🖥️ GUI Application — Major Update
 
 > **GeminiWatermarkTool now comes with a full graphical desktop application.**
