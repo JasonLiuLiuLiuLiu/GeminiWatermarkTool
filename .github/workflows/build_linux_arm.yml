@@ -1,0 +1,64 @@
+name: Build Linux ARM CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '发布的 Release 标签 (默认请使用 latest-arm 以匹配服务器)'
+        required: true
+        default: 'latest-arm'
+
+permissions:
+  contents: write
+
+jobs:
+  build-arm:
+    # 启用 GitHub 原生支持的公开库 ARM64 免费服务器，编译速度最快
+    runs-on: ubuntu-24.04-arm
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: ⚙️ 安装 Ubuntu 底层依赖
+      run: |
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          build-essential \
+          cmake \
+          libopencv-dev \
+          libfmt-dev \
+          libcli11-dev \
+          libspdlog-dev \
+          pkg-config \
+          zip
+
+    - name: 🔨 编译构建 CLI 版工具
+      run: |
+        mkdir build && cd build
+        cmake -DBUILD_GUI=OFF -DENABLE_AI_DENOISE=OFF -DCMAKE_BUILD_TYPE=Release ..
+        make -j$(nproc)
+        
+    - name: 📦 打包为 Zip
+      run: |
+        cd build
+        cp GeminiWatermarkTool ./GeminiWatermarkTool-Linux-arm64
+        chmod +x ./GeminiWatermarkTool-Linux-arm64
+        zip GeminiWatermarkTool-Linux-arm64.zip GeminiWatermarkTool-Linux-arm64
+
+    - name: ⬆️ 上传至 Actions Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: GeminiWatermarkTool-Linux-arm64
+        path: build/GeminiWatermarkTool-Linux-arm64.zip
+
+    - name: 🚀 发布至 GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.tag_name }}
+        files: build/GeminiWatermarkTool-Linux-arm64.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
