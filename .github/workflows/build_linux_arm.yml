@@ -14,7 +14,7 @@ permissions:
 jobs:
   build-arm:
     # 启用 GitHub 原生支持的公开库 ARM64 免费服务器，编译速度最快
-    runs-on: ubuntu-22.04-arm
+    runs-on: ubuntu-24.04-arm
     
     steps:
     - uses: actions/checkout@v4
