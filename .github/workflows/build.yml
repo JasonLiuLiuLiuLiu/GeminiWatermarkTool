@@ -3,11 +3,14 @@
 # =============================================================================
 name: Build
 
+name: Build
+
 on:
   push:
     branches: [ main, develop ]
     tags: [ 'v*' ]
     paths-ignore:
+      - '.github/**'
       - '**.md'
       - 'docs/**'
       - 'LICENSE'
@@ -15,6 +18,7 @@ on:
   pull_request:
     branches: [ main ]
     paths-ignore:
+      - '.github/**'
       - '**.md'
       - 'docs/**'
       - 'LICENSE'
